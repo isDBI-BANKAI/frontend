@@ -1,3 +1,5 @@
+import { Link } from "react-router-dom";
+
 export default function Hero() {
   return (
     <section className="flex items-center justify-between w-full relative text-white">
@@ -6,7 +8,7 @@ export default function Hero() {
           <h1 className="text-4xl font-bold">Lorem ipsum dolor sit amet consectetur adipisicing elit. Aspernatur?</h1>
           <p className="mt-4 text-lg">Lorem ipsum dolor sit amet, consectetur adipiscing elit. Donec nisl urna, porttitor vitae ornare maximus, mollis non lectus. Nunc sit amet sapien pharetra, vulputate lectus eu, vestibulum leo</p>
           <div className="w-full mt-4">
-              <button className="text-white bg px-6 py-3 bg-mainColor hover:opacity-75 transition-all font-bold text-xl rounded-xl">Request a Demo</button>
+              <Link to='/chat/new' className="text-white bg px-6 py-3 bg-mainColor hover:opacity-75 transition-all font-bold text-xl rounded-xl">Try a Demo</Link>
           </div>
         </div>
         <img
