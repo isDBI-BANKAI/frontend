@@ -6,8 +6,7 @@ import {
 const API = axios.create({
     baseURL: SERVER_URL[
         import.meta.env.VITE_ENVIRONMENT],
-    timeout: 12000,
-    withCredentials: true
+    timeout: 600000,
 });
 
 export default API;

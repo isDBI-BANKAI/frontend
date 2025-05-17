@@ -1,4 +1,4 @@
 export const SERVER_URL = {
-    development: "http://localhost:3000/api/v1/",
-    production: "my-prod-api",
+    development: "http://127.0.0.1:8000/",
+    production: "https://agentic-production-3776.up.railway.app/",
 }

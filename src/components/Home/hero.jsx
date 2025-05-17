@@ -10,9 +10,9 @@ export default function Hero() {
           </div>
         </div>
         <img
-        src="/images/Home/hero-righter.svg"
-        alt="Home"
-        className="w-[70%] h-auto mt-8 rounded-lg shadow-lg"
+          src="/images/Home/hero-righter.svg"
+          alt="Home"
+          className="w-[70%] h-auto mt-8 rounded-lg shadow-lg"
         />
     </section>
   )

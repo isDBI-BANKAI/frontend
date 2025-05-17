@@ -1,11 +1,11 @@
 import { Share2, Settings, Plus, Paperclip, Send, Trash2, X, Check, ChevronDown, Camera } from "lucide-react"
 import { useState, useRef, useEffect } from "react"
 import { Link, useParams } from "react-router-dom";
-import { toast } from "react-toastify";
 import API from "../../utils/api-client";
 import ChatNew from "./new/ChatNew";
 import ChatDiscussion from "./ChatDiscussion";
 import mockChats from "../../data/mockChats";
+import { toast } from "react-toastify";
 
 const aiModels = [
   {
@@ -74,6 +74,21 @@ const aiModels = [
   },
 ]
 
+const endpointMaps = {
+  0: {
+    endpoint: "agent/scenario-journaling/",
+    key: "scenario",
+  },
+  1: {
+    endpoint: "agent/fas-detection/",
+    key: "journal",
+  },
+  2: {
+    endpoint: "agent/fas-enhancement/",
+    key: "journal",
+  },
+}
+
 export default function ChatContent({
 }) {
   const [showModelDropdown, setShowModelDropdown] = useState(false);
@@ -83,6 +98,10 @@ export default function ChatContent({
   const [inputText, setInputText] = useState("");
   const fileInputRef = useRef(null);
   const attachmentRef = useRef(null);
+
+  const [activeCategory, setActiveCategory] = useState(0);
+  const [activeCategoryOption, setActiveCategoryOption] = useState(null);
+  const [isManualEntry, setManualEntry] = useState(false);
 
   const params = useParams();
   const { id } = params;
@@ -111,7 +130,7 @@ export default function ChatContent({
   }, [id]);
 
   const handleFileUpload = (e) => {
-    const newFiles = Array.from(e.target.files).map((file) => ({
+    const newFiles = Array.from(e?.target?.files ?? file).map((file) => ({
       id: Math.random().toString(36).substring(7),
       name: file.name,
       progress: 100,
@@ -146,24 +165,101 @@ export default function ChatContent({
     setShowModelDropdown(false)
   }
 
+  const getBotResultFormat = (type, data) => {
+    let obj = {
+      isUser: false,
+      sources: data?.references?.length,
+    }
+    if (+type == 0) {
+      obj.content = [
+        "### Calculations:",
+        data?.calculations,
+        "### Reasoning:",
+        data?.reasoning,
+        "### Journal:",
+        data?.journal
+      ].join('\n');
+    } else if (+type == 1) {
+      obj.content = [
+        "### References:",
+        data?.references.join('\n'),
+        "### Reasoning:",
+        data?.reasoning,
+        "### Detections:",
+        (Array.isArray(data?.detections)
+          ? data.detections.map(
+          (d, i) =>
+            `- [${d.index}] ${d.name} (probability: ${d.probability})`
+        ).join('\n')
+          : data?.detections || "None"
+        )
+      ].join('\n');
+    } else if (+type == 2) {
+      obj.content = [
+        "### Detections:",
+        (Array.isArray(data?.detections)
+          ? data.detections.map(
+          (d, i) =>
+            `- [${d.index}] ${d.name} (probability: ${d.probability})`
+        ).join('\n')
+          : data?.detections || "None"
+        ),
+        "### Reasoning:",
+        data?.reasoning,
+        "### References:",
+        data?.references.join('\n')
+      ].join('\n');
+    } else {
+      obj.content = [ //TODO: ADD CHALLENGE 4!!
+        "### Calculations:",
+        data?.calculations,
+        "### Reasoning:",
+        data?.reasoning,
+        "### Journal:",
+        data?.journal
+      ].join('\n');
+    }
+    return obj;
+  }
+
+  const [conData, setConData] = useState(null);
+  const [sendPromptLoading, setSendPromptLoading] = useState(false);
   const sendPrompt = async () => {
-    if (!inputText.trim()) return;
+    const { endpoint: sendHitEndpoint, key: sendKey } = endpointMaps[+activeCategory] || {};
+    setSendPromptLoading(true);
+    setConData(null);
     try {
-      await API.post("chat/send", {
-        message: inputText,
-        model: selectedModel.id,
-        files: files.map(f => f.name),
+      const res = await API.post(sendHitEndpoint, {
+        [sendKey]: inputText
       });
+      const myid = Math.floor(Math.random() * 100);
+      setConData({
+        id: myid,
+        title: `Discussion N: ${myid}`,
+        context: [
+            {
+                isUser: true,
+                content: inputText,
+            },
+            getBotResultFormat(activeCategory, res?.data)
+        ],
+        category: activeCategory,
+        option: activeCategoryOption
+      })
       setInputText("");
       setFiles([]);
       setShowAttachments(false);
+      toast.success("Prompt submitted and the response is awaiting!!")
     } catch (error) {
-      console.error("Failed to send prompt:", error);
+      console.log(error)
+      toast.error("Failed to send prompt");
+    } finally {
+      setSendPromptLoading(false);
     }
   }
 
   return (
-    <div className="flex-1 flex flex-col h-screen relative">
+    <div className="flex-1 flex flex-col h-screen relative bg-[#fdfdfd]">
       {/* Header */}
       <header className="flex items-center justify-between px-6 py-5 border-b">
         <div className="flex items-center">
@@ -209,7 +305,13 @@ export default function ChatContent({
           <button className="p-2 text-gray-500 hover:text-gray-700 rounded-full hover:bg-gray-100">
             <Settings className="h-5 w-5" />
           </button>
-          <Link to='/chat/new' className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-1.5 rounded-full text-base">
+          <Link to='/chat/new' onClick={() => {
+            setConData(null);
+            if (activeCategory == 1) {
+              setActiveCategoryOption(0);
+              setManualEntry(false);
+            }
+          }} className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-1.5 rounded-full text-base">
             <Plus className="h-4 w-4" />
             New Chat
           </Link>
@@ -217,14 +319,27 @@ export default function ChatContent({
       </header>
 
       {/* Chat Content */}
-      <div className="flex-1 overflow-y-auto px-40 py-10">
+      <div className="flex-1 overflow-y-auto px-40 pt-8 pb-2">
         {
-          !HAS_CONTENT
+          (!HAS_CONTENT && (!conData || Object.keys(conData).length === 0))
           ?
-          <ChatNew />
+          <ChatNew
+            activeCategory={activeCategory}
+            setActiveCategory={setActiveCategory}
+            activeCategoryOption={activeCategoryOption}
+            setActiveCategoryOption={setActiveCategoryOption}
+            setInputText={setInputText}
+            setFiles={setFiles}
+            isManualEntry={isManualEntry}
+            setManualEntry={setManualEntry}
+          />
           :
           <ChatDiscussion
-            chatContent={chatContent}
+            chatContent={
+              chatContent && !!Object.keys(chatContent).length
+              ? chatContent
+              : conData
+            }
             isContentLoading={isContentLoading}
           />
         }
@@ -238,7 +353,7 @@ export default function ChatContent({
               placeholder="Ask me a question..."
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
-              className="w-full p-3 resize-none text-xl focus:outline-none min-h-[120px] rounded-lg border-2 shadow-sm focus:border-green-500"
+              className="w-full p-3 resize-none text-xl focus:outline-none min-h-[110px] rounded-lg border-2 shadow-sm focus:border-green-500"
               rows={2}
               autoFocus
             ></textarea>
@@ -279,6 +394,7 @@ export default function ChatContent({
                         <button
                           onClick={handleAddFileClick}
                           className="flex items-center gap-1 bg-gray-50 text-green-600 font-medium px-4 py-2 rounded-full"
+                          id="add-file-button"
                         >
                           <span>Add</span>
                           <Plus className="h-5 w-5" />
@@ -328,11 +444,36 @@ export default function ChatContent({
             <div className="flex items-center gap-2">
               <span className="text-base text-gray-400">{inputText.length}/3000</span>
               <button className={`p-1.5 bg-green-600 text-white rounded-full ${
-                inputText ? "opacity-100 hover:bg-green-700" : "opacity-50 cursor-not-allowed"
-                }`} disabled={!inputText}
+                (!(sendPromptLoading || !!!inputText || ((activeCategory == 2) && (activeCategoryOption == null)))) ? "opacity-100 hover:bg-green-700" : "opacity-50 cursor-not-allowed"
+                }`} disabled={sendPromptLoading || !!!inputText || ((activeCategory == 2) && (activeCategoryOption == null))}
                 onClick={sendPrompt}
               >
-                <Send className="h-6 w-6" />
+                {
+                  sendPromptLoading
+                  ?
+                  <svg
+                    className="h-6 w-6 text-black animate-spin"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <circle
+                      className="opacity-20"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    />
+                    <path
+                      className="opacity-80"
+                      fill="currentColor"
+                      d="M12 2a10 10 0 0 1 10 10h-4a6 6 0 0 0-6-6V2z"
+                    />
+                  </svg>
+                  :
+                  <Send className="h-6 w-6" />
+                }
               </button>
             </div>
           </div>
